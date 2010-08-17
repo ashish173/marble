@@ -14,11 +14,15 @@
 
 #include <QtCore/qmath.h>
 #include <QtCore/QTimer>
+#include <QtGui/QVector3D>
+#include <QtOpenGL/QGLContext>
 
+#include "AbstractProjection.h"
 #include "SphericalScanlineTextureMapper.h"
 #include "EquirectScanlineTextureMapper.h"
 #include "MercatorScanlineTextureMapper.h"
 #include "TileScalingTextureMapper.h"
+#include "GLTextureMapper.h"
 #include "GeoPainter.h"
 #include "GeoSceneGroup.h"
 #include "GeoSceneTypes.h"
@@ -60,6 +64,7 @@ public:
     StackedTileLoader    m_tileLoader;
     TextureMapperInterface *m_texmapper;
     TextureColorizer *m_texcolorizer;
+    GLTextureMapper m_glTexmapper;
     QVector<const GeoSceneTiled *> m_textures;
     const GeoSceneGroup *m_textureLayerSettings;
     QString m_runtimeTrace;
@@ -81,6 +86,7 @@ TextureLayer::Private::Private( HttpDownloadManager *downloadManager,
     , m_tileLoader( &m_layerDecorator )
     , m_texmapper( 0 )
     , m_texcolorizer( 0 )
+    , m_glTexmapper( &m_tileLoader )
     , m_textureLayerSettings( 0 )
     , m_repaintTimer()
 {
@@ -254,6 +260,50 @@ bool TextureLayer::render( GeoPainter *painter, ViewportParams *viewport,
     d->m_texmapper->mapTexture( painter, viewport, dirtyRect, d->m_texcolorizer );
     d->m_runtimeTrace = QString("Cache: %1 ").arg(d->m_tileLoader.tileCount());
     return true;
+}
+
+void TextureLayer::paintGL( QGLContext *glContext, const ViewportParams *viewport )
+{
+    // Stop repaint timer if it is already running
+    d->m_repaintTimer.stop();
+
+    if ( d->m_textures.isEmpty() )
+        return;
+
+    // choose the smaller dimension for selecting the tile level, leading to higher-resolution results
+    const int levelZeroWidth = d->m_tileLoader.tileSize().width() * d->m_tileLoader.tileColumnCount( 0 );
+    const int levelZeroHight = d->m_tileLoader.tileSize().height() * d->m_tileLoader.tileRowCount( 0 );
+    const int levelZeroMinDimension = qMin( levelZeroWidth, levelZeroHight );
+
+    qreal linearLevel = ( 4.0 * (qreal)( viewport->radius() ) / (qreal)( levelZeroMinDimension ) );
+
+    if ( linearLevel < 1.0 )
+        linearLevel = 1.0; // Dirty fix for invalid entry linearLevel
+
+    // As our tile resolution doubles with each level we calculate
+    // the tile level from tilesize and the globe radius via log(2)
+
+    qreal tileLevelF = qLn( linearLevel ) / qLn( 2.0 );
+    int tileLevel = (int)( tileLevelF * 1.00001 ); // snap to the sharper tile level a tiny bit earlier
+                                                   // to work around rounding errors when the radius
+                                                   // roughly equals the global texture width
+
+//    mDebug() << "tileLevelF: " << tileLevelF << " tileLevel: " << tileLevel;
+
+    if ( tileLevel > d->m_tileLoader.maximumTileLevel() )
+        tileLevel = d->m_tileLoader.maximumTileLevel();
+
+    const bool changedTileLevel = tileLevel != d->m_glTexmapper.tileZoomLevel();
+
+    //    mDebug() << "Texture Level was set to: " << tileLevel;
+    d->m_glTexmapper.setTileZoomLevel( tileLevel );
+
+    if ( changedTileLevel ) {
+        emit tileLevelChanged( tileLevel );
+    }
+
+    d->m_glTexmapper.mapTexture( glContext, viewport );
+    d->m_runtimeTrace = QString("Cache: %1 ").arg(d->m_tileLoader.tileCount());
 }
 
 QString TextureLayer::runtimeTrace() const
