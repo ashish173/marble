@@ -92,6 +92,7 @@ class MARBLE_EXPORT ViewportParams
     void setRadius(int radius);
 
     void centerOn( qreal lon, qreal lat );
+    void setHeading( qreal heading );
 
     Quaternion planetAxis() const;
     const matrix * planetAxisMatrix() const;
@@ -187,6 +188,8 @@ class MARBLE_EXPORT ViewportParams
     bool geoCoordinates( const int x, const int y,
                          qreal &lon, qreal &lat,
                          GeoDataCoordinates::Unit unit = GeoDataCoordinates::Degree ) const;
+
+    qreal heading() const;
 
     bool mapCoversViewport() const;
 
