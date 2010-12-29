@@ -182,8 +182,6 @@ void GnomonicScanlineTextureMapper::RenderJob::run()
             while ( lon >  M_PI ) lon -= 2 * M_PI;
 
             const qreal lat = qAsin( qCos(c)*qSin(centerLat) + ry*qSin(c)*qCos(centerLat)/p );
-            if ( lon < -M_PI ) lon += 2 * M_PI;
-            if ( lon >  M_PI ) lon -= 2 * M_PI;
 
             if ( interpolate ) {
                 if ( highQuality )
