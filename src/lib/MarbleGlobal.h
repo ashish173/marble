@@ -43,7 +43,8 @@ Q_DECLARE_FLAGS(TessellationFlags, TessellationFlag)
 enum Projection { 
     Spherical,          ///< Spherical projection
     Equirectangular,    ///< Flat projection ("plate carree")
-    Mercator            ///< Mercator projection
+    Mercator,           ///< Mercator projection
+    Gnomonic            ///< Gnomonic projection
 };
 
 /**
