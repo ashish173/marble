@@ -127,6 +127,10 @@ void ViewportParams::setProjection(Projection newProjection)
     case Mercator:
         d->m_currentProjection = &d->s_mercatorProjection;
         break;
+    case Gnomonic:
+#warning fixme
+        d->m_currentProjection = &d->s_mercatorProjection;
+        break;
     }
 
     // We now need to reset the planetAxis to make sure

@@ -20,6 +20,7 @@
 #include "SphericalScanlineTextureMapper.h"
 #include "EquirectScanlineTextureMapper.h"
 #include "MercatorScanlineTextureMapper.h"
+#include "GnomonicScanlineTextureMapper.h"
 #include "TileScalingTextureMapper.h"
 #include "GeoPainter.h"
 #include "GeoSceneGroup.h"
@@ -296,6 +297,9 @@ void TextureLayer::setupTextureMapper( Projection projection )
             } else {
                 d->m_texmapper = new MercatorScanlineTextureMapper( &d->m_tileLoader );
             }
+            break;
+        case Gnomonic:
+            d->m_texmapper = new GnomonicScanlineTextureMapper( &d->m_tileLoader );
             break;
         default:
             d->m_texmapper = 0;

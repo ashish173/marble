@@ -124,6 +124,7 @@ set(marblewidget_SRCS
     ScanlineTextureMapperContext.cpp
     SphericalScanlineTextureMapper.cpp
     EquirectScanlineTextureMapper.cpp
+    GnomonicScanlineTextureMapper.cpp
     MercatorScanlineTextureMapper.cpp
     TileScalingTextureMapper.cpp
     DiscCache.cpp
