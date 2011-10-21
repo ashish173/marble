@@ -11,10 +11,13 @@
 #ifndef DECLARATIVE_MARBLE_WIDGET_H
 #define DECLARATIVE_MARBLE_WIDGET_H
 
+#include "MarbleModel.h"
+#include "MarbleMap.h"
+
 #include "Coordinate.h"
 #include "Placemark.h"
 
-#include <QtGui/QGraphicsProxyWidget>
+#include <QtDeclarative/QDeclarativeItem>
 #include <QtCore/QList>
 #include <QtCore/QPoint>
 #include <QtDeclarative/QtDeclarative>
@@ -26,7 +29,6 @@ namespace Marble
 // Forward declarations
 class AbstractFloatItem;
 class MarbleModel;
-class MarbleWidget;
 class RenderPlugin;
 class ViewportParams;
 }
@@ -40,7 +42,7 @@ class ZoomButtonInterceptor;
   * displayed in QML when it is the only widget. For performance reasons it would be
   * nice to avoid this.
   */
-class MarbleWidget : public QGraphicsProxyWidget
+class MarbleWidget : public QDeclarativeItem
 {
     Q_OBJECT
 
@@ -55,14 +57,13 @@ class MarbleWidget : public QGraphicsProxyWidget
     Q_PROPERTY( QObject* mapThemeModel READ mapThemeModel NOTIFY mapThemeModelChanged )
     Q_PROPERTY( QList<QObject*> renderPlugins READ renderPlugins CONSTANT )
     Q_PROPERTY( QList<QObject*> floatItems READ floatItems CONSTANT )
-
     Q_PROPERTY(QDeclarativeListProperty<DeclarativeDataPlugin> dataLayers READ dataLayers)
-    Q_PROPERTY(QDeclarativeListProperty<QObject> children READ childList)
-    Q_CLASSINFO("DefaultProperty", "children")
 
 public:
     /** Constructor */
-    explicit MarbleWidget( QGraphicsItem *parent = 0, Qt::WindowFlags flags = 0 );
+    explicit MarbleWidget( QDeclarativeItem *parent = 0 );
+
+    void paint( QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = 0 );
 
     ~MarbleWidget();
 
@@ -81,8 +82,6 @@ public:
     void setActiveRenderPlugins( const QStringList &items );
 
     QStringList activeRenderPlugins() const;
-
-    QDeclarativeListProperty<QObject> childList();
 
     QDeclarativeListProperty<DeclarativeDataPlugin> dataLayers();
 
@@ -189,11 +188,6 @@ public Q_SLOTS:
 
     void setDataPluginDelegate( const QString &plugin, QDeclarativeComponent* delegate );
 
-protected:
-    virtual bool event ( QEvent * event );
-
-    virtual bool sceneEvent ( QEvent * event );
-
 private Q_SLOTS:
     void updateCenterPosition();
 
@@ -202,8 +196,8 @@ private Q_SLOTS:
 private:
     static void addLayer( QDeclarativeListProperty<DeclarativeDataPlugin> *list, DeclarativeDataPlugin *layer );
 
-    /** Wrapped MarbleWidget */
-    Marble::MarbleWidget *const m_marbleWidget;
+    Marble::MarbleModel m_model;
+    Marble::MarbleMap m_map;
 
     bool m_inputEnabled;
 
@@ -212,8 +206,6 @@ private:
     ZoomButtonInterceptor *const m_interceptor;
 
     QList<DeclarativeDataPlugin*> m_dataLayers;
-
-    QList<QObject*> m_children;
 };
 
 #endif
