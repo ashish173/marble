@@ -8,6 +8,7 @@
 // Copyright 2011 Daniel Marth <danielmarth@gmx.at>
 
 import Qt 4.7
+import QtQuick 1.1
 import org.kde.edu.marble 0.11
 import com.nokia.meego 1.0
 
@@ -214,6 +215,37 @@ Item {
                 positionFinderDirection.rotation = 270 + 180.0 / Math.PI * Math.atan2 ( positionFinderDirection.y - pos.y, positionFinderDirection.x - pos.x )
                 var indicatorPosition = map.coordinate( positionFinderDirection.x, positionFinderDirection.y )
                 positionDistanceText.text = (tracking.lastKnownPosition.distance( indicatorPosition.longitude, indicatorPosition.latitude ) / 1000).toFixed(1) + " km"
+            }
+        }
+
+        PinchArea {
+            enabled: true
+            anchors.fill: parent
+            property real startCenterLon: 0.0
+            property real startCenterLat: 0.0
+            property int startMouseX: 0
+            property int startMouseY: 0
+            property int startRadius: 1
+
+            onPinchStarted: {
+                startCenterLon = map.center.longitude
+                startCenterLat = map.center.latitude
+                startMouseX = pinch.center.x
+                startMouseY = pinch.center.y
+                startRadius = map.radius
+            }
+
+            onPinchUpdated: {
+                var dx = startMouseX - pinch.center.x
+                var dy = startMouseY - pinch.center.y
+                map.center.longitude = startCenterLon + 90 * dx / map.radius
+                map.center.latitude  = startCenterLat - 90 * dy / map.radius
+                map.smooth = false
+                map.radius = startRadius * pinch.scale
+            }
+
+            onPinchFinished: {
+                map.smooth = true
             }
         }
     }
