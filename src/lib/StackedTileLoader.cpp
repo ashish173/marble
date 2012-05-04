@@ -28,12 +28,14 @@
 #include "MarbleDebug.h"
 #include "MergedLayerDecorator.h"
 #include "StackedTile.h"
+#include "TextureTile.h"
 #include "TileLoader.h"
 #include "TileLoaderHelper.h"
 #include "MarbleGlobal.h"
 
 #include <QtCore/QCache>
 #include <QtCore/QHash>
+#include <QtCore/QMetaType>
 #include <QtCore/QReadWriteLock>
 #include <QtGui/QImage>
 
@@ -44,8 +46,9 @@ namespace Marble
 class StackedTileLoaderPrivate
 {
 public:
-    StackedTileLoaderPrivate( MergedLayerDecorator *mergedLayerDecorator )
-        : m_layerDecorator( mergedLayerDecorator ),
+    StackedTileLoaderPrivate( StackedTileLoader *parent, MergedLayerDecorator *mergedLayerDecorator )
+        : q( parent ),
+          m_layerDecorator( mergedLayerDecorator ),
           m_maxTileLevel( 0 )
     {
         m_tileCache.setMaxCost( 20000 * 1024 ); // Cache size measured in bytes
@@ -55,6 +58,9 @@ public:
     QVector<GeoSceneTiled const *>
         findRelevantTextureLayers( TileId const & stackedTileId ) const;
 
+    void loadTile( const TileId &id );
+
+    StackedTileLoader *const q;
     MergedLayerDecorator *const m_layerDecorator;
     int         m_maxTileLevel;
     QVector<GeoSceneTiled const *> m_textureLayers;
@@ -65,8 +71,11 @@ public:
 
 StackedTileLoader::StackedTileLoader( MergedLayerDecorator *mergedLayerDecorator, QObject *parent )
     : QObject( parent ),
-      d( new StackedTileLoaderPrivate( mergedLayerDecorator ) )
+      d( new StackedTileLoaderPrivate( this, mergedLayerDecorator ) )
 {
+    qRegisterMetaType<TileId>( "TileId" );
+    connect( this, SIGNAL( requestTile( TileId const & ) ),
+             this, SLOT( loadTile( TileId const & ) ), Qt::QueuedConnection );
 }
 
 StackedTileLoader::~StackedTileLoader()
@@ -194,17 +203,43 @@ const StackedTile* StackedTileLoader::loadTile( TileId const & stackedTileId )
 
     // mDebug() << "load Tile from Disk: " << stackedTileId.toString();
 
-    QVector<GeoSceneTiled const *> const textureLayers = d->findRelevantTextureLayers( stackedTileId );
+    Q_ASSERT( stackedTileId.zoomLevel() > 0 ); // level-zero tiles should be in d->m_tilesOnDisplay;
 
-    stackedTile = d->m_layerDecorator->loadTile( stackedTileId, textureLayers );
-    if ( stackedTile ){
-        stackedTile->setUsed( true );
+    for ( int level = stackedTileId.zoomLevel() - 1; level >= 0; --level ) {
+        const int deltaLevel = stackedTileId.zoomLevel() - level;
+        TileId id( 0, level, stackedTileId.x() >> deltaLevel, stackedTileId.y() >> deltaLevel );
 
-        d->m_tilesOnDisplay[ stackedTileId ] = stackedTile;
+        const StackedTile *toScale = 0;
+
+        if ( d->m_tileCache.object( id ) ) {
+            toScale = d->m_tileCache.object( id );
+        }
+
+        if ( toScale == 0 && d->m_tilesOnDisplay.value( id, 0 ) ) {
+            toScale = d->m_tilesOnDisplay.value( id, 0 );
+        }
+
+        if ( toScale != 0 ) {
+            // which rect to scale?
+            const int restTileX = id.x() % ( 1 << deltaLevel );
+            const int restTileY = id.y() % ( 1 << deltaLevel );
+            const int partWidth = toScale->resultImage()->width() >> deltaLevel;
+            const int partHeight = toScale->resultImage()->height() >> deltaLevel;
+            const int startX = restTileX * partWidth;
+            const int startY = restTileY * partHeight;
+            const QImage resulImage = toScale->resultImage()->copy( startX, startY, partWidth, partHeight );
+
+            stackedTile = new StackedTile( stackedTileId, resulImage.scaled( toScale->resultImage()->size() ), 0, QVector< QSharedPointer<Tile> >() );
+            stackedTile->setUsed( true );
+            d->m_tilesOnDisplay[ stackedTileId ] = stackedTile;
+            break;
+        }
     }
+
     d->m_cacheLock.unlock();
 
     emit tileLoaded( stackedTileId );
+    emit requestTile( stackedTileId );
 
     return stackedTile;
 }
@@ -340,6 +375,26 @@ StackedTileLoaderPrivate::findRelevantTextureLayers( TileId const & stackedTileI
             result.append( candidate );
     }
     return result;
+}
+
+void StackedTileLoaderPrivate::loadTile( const TileId &id )
+{
+    QVector<GeoSceneTiled const *> const textureLayers = findRelevantTextureLayers( id );
+
+    if ( m_tilesOnDisplay.contains( id ) ) {
+        delete m_tilesOnDisplay.value( id, 0 );
+        StackedTile *const tile = m_layerDecorator->loadTile( id, textureLayers );
+        tile->setUsed( true );
+        m_tilesOnDisplay.insert( id, tile );
+        emit q->tileLoaded( id );
+    }
+    else if ( m_tileCache.contains( id ) ) {
+        m_tileCache.remove( id );
+        StackedTile *const tile = m_layerDecorator->loadTile( id, textureLayers );
+        tile->setUsed( false );
+        m_tileCache.insert( id, tile );
+        emit q->tileLoaded( id );
+    }
 }
 
 }
