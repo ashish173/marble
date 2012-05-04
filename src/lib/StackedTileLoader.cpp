@@ -128,7 +128,10 @@ void StackedTileLoader::resetTilehash()
     QHash<TileId, StackedTile*>::const_iterator it = d->m_tilesOnDisplay.constBegin();
     QHash<TileId, StackedTile*>::const_iterator const end = d->m_tilesOnDisplay.constEnd();
     for (; it != end; ++it ) {
-        it.value()->setUsed( false );
+        StackedTile *const tile = it.value();
+        if ( tile->id().zoomLevel() != 0 ) { // keep level zero tiles in the hash
+            it.value()->setUsed( false );
+        }
     }
 }
 
@@ -141,6 +144,7 @@ void StackedTileLoader::cleanupTilehash()
     while ( it.hasNext() ) {
         it.next();
         if ( !it.value()->used() ) {
+            Q_ASSERT( it.value()->id().zoomLevel() != 0 ); // keep level zero tiles in the hash
             // If insert call result is false then the cache is too small to store the tile
             // but the item will get deleted nevertheless and the pointer we have
             // doesn't get set to zero (so don't delete it in this case or it will crash!)
@@ -171,6 +175,8 @@ const StackedTile* StackedTileLoader::loadTile( TileId const & stackedTileId )
         d->m_cacheLock.unlock();
         return stackedTile;
     }
+
+    Q_ASSERT( stackedTileId.zoomLevel() != 0 ); // level zero tiles should always be in the cache
 
     mDebug() << Q_FUNC_INFO << stackedTileId;
 
@@ -216,9 +222,23 @@ quint64 StackedTileLoader::volatileCacheLimit() const
 
 void StackedTileLoader::reloadVisibleTiles()
 {
+    bool reloadLevelZero = true;
+
+    foreach ( const TileId &id, d->m_tilesOnDisplay.keys() ) {
+        // presence of non-level zero tiles implies that they're not visible and hence,
+        // they shouldn't be reloaded
+        if ( id.zoomLevel() != 0 ) {
+            reloadLevelZero = false;
+            break;
+        }
+    }
+
     QHash <TileId, StackedTile*>::iterator itpoint = d->m_tilesOnDisplay.begin();
     QHash <TileId, StackedTile*>::iterator const endpoint = d->m_tilesOnDisplay.end();
     for (; itpoint != endpoint; ++itpoint ) {
+        if ( itpoint.key().zoomLevel() == 0 && !reloadLevelZero )
+            continue;
+
         QVector<GeoSceneTiled const *> const textureLayers = d->findRelevantTextureLayers( itpoint.key() );
         // it's debatable here, whether DownloadBulk or DownloadBrowse should be used
         // but since "reload" or "refresh" seems to be a common action of a browser and it
@@ -286,6 +306,17 @@ void StackedTileLoader::clear()
     d->m_tileCache.clear(); // clear the tile cache in physical memory
 
     emit cleared();
+
+    if ( !d->m_textureLayers.isEmpty() ) {
+        for ( int row = 0; row < tileRowCount( 0 ); ++row ) {
+            for ( int column = 0; column < tileColumnCount( 0 ); ++column ) {
+                const TileId id = TileId( 0, 0, column, row );
+                StackedTile *const levelZeroTile = d->m_layerDecorator->loadTile( id, d->findRelevantTextureLayers( id ) );
+                levelZeroTile->setUsed( true );
+                d->m_tilesOnDisplay.insert( id, levelZeroTile );
+            }
+        }
+    }
 }
 
 // 
