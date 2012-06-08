@@ -164,6 +164,7 @@ set(marblewidget_SRCS
     PluginInterface.cpp
     DialogConfigurationInterface.cpp
     LayerInterface.cpp
+    GlLayerInterface.cpp
     RenderPlugin.cpp
     RenderPluginInterface.cpp
     PositionProviderPlugin.cpp
@@ -432,6 +433,7 @@ else (APPLE AND QTONLY)
     RoutingRunnerPlugin.h
     ParseRunnerPlugin.h
     LayerInterface.h
+    GlLayerInterface.h
     PluginAboutDialog.h
     marble_export.h
     Planet.h
