@@ -28,9 +28,7 @@ class AbstractDataPluginItem;
 class GeoPainter;
 class ViewportParams;
 class RenderPlugin;
-class AbstractFloatItem;
 class AbstractDataPlugin;
-class MarbleModel;
 class LayerInterface;
 
 /**
@@ -43,23 +41,15 @@ class LayerManager : public QObject
     Q_OBJECT
 
  public:
-    explicit LayerManager( const MarbleModel *model, QObject *parent = 0);
+    explicit LayerManager( QObject *parent = 0);
     ~LayerManager();
 
     void renderLayers( GeoPainter *painter, ViewportParams *viewport );
 
     bool showBackground() const;
 
-    /**
-     * @brief Returns a list of all RenderPlugins on the layer, this includes float items
-     * @return the list of RenderPlugins
-     */
-    QList<RenderPlugin *>      renderPlugins() const;
-    /**
-     * @brief Returns a list of all FloatItems on the layer
-     * @return the list of the floatItems
-     */
-    QList<AbstractFloatItem *> floatItems()    const;
+    void addRenderPlugin( RenderPlugin *renderPlugin );
+
     /**
      * @brief Returns a list of all DataPlugins on the layer
      * @return the list of DataPlugins
@@ -90,11 +80,6 @@ class LayerManager : public QObject
     void renderPluginInitialized( RenderPlugin *renderPlugin );
 
     /**
-     * This signal is emitted when the settings of a plugin changed.
-     */
-    void pluginSettingsChanged();
-
-    /**
      * This signal is emitted when the repaint of the view was requested by a plugin.
      * If available with the @p dirtyRegion which is the region the view will change in.
      * If dirtyRegion.isEmpty() returns true, the whole viewport has to be repainted.
@@ -107,8 +92,6 @@ class LayerManager : public QObject
     void setShowBackground( bool show );
 
     void setShowRuntimeTrace( bool show );
-
-    void setVisible( const QString &nameId, bool visible );
 
  private:
     Q_PRIVATE_SLOT( d, void updateVisibility( bool, const QString & ) )

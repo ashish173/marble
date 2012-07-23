@@ -33,6 +33,7 @@
 
 // Marble
 #include "layers/AtmosphereLayer.h"
+#include "layers/FloatItemsLayer.h"
 #include "layers/FogLayer.h"
 #include "layers/FpsLayer.h"
 #include "layers/GeometryLayer.h"
@@ -58,6 +59,7 @@
 #include "MarbleDebug.h"
 #include "MarbleDirs.h"
 #include "MarbleModel.h"
+#include "PluginManager.h"
 #include "RenderPlugin.h"
 #include "SunLocator.h"
 #include "TileCoordsPyramid.h"
@@ -125,10 +127,13 @@ class MarbleMapPrivate
 
     VectorComposer   m_veccomposer;
 
+    QList<RenderPlugin *> m_renderPlugins;
+
     LayerManager     m_layerManager;
     MarbleSplashLayer m_marbleSplashLayer;
     MarbleMap::CustomPaintLayer m_customPaintLayer;
     GeometryLayer            m_geometryLayer;
+    FloatItemsLayer          m_floatItemsLayer;
     AtmosphereLayer          m_atmosphereLayer;
     FogLayer                 m_fogLayer;
     GroundLayer              m_groundLayer;
@@ -144,14 +149,16 @@ MarbleMapPrivate::MarbleMapPrivate( MarbleMap *parent, MarbleModel *model )
           m_viewParams(),
           m_showFrameRate( false ),
           m_veccomposer(),
-          m_layerManager( model, parent ),
+          m_layerManager( parent ),
           m_customPaintLayer( parent ),
           m_geometryLayer( model->treeModel() ),
+          m_floatItemsLayer( parent ),
           m_vectorMapBaseLayer( &m_veccomposer ),
           m_vectorMapLayer( &m_veccomposer ),
           m_textureLayer( model->downloadManager(), model->sunLocator(), &m_veccomposer ),
           m_placemarkLayer( model->placemarkModel(), model->placemarkSelectionModel(), model->clock() )
 {
+    m_layerManager.addLayer( &m_floatItemsLayer );
     m_layerManager.addLayer( &m_fogLayer );
     m_layerManager.addLayer( &m_groundLayer );
     m_layerManager.addLayer( &m_geometryLayer );
@@ -167,14 +174,19 @@ MarbleMapPrivate::MarbleMapPrivate( MarbleMap *parent, MarbleModel *model )
     QObject::connect( &m_placemarkLayer, SIGNAL( repaintNeeded()),
                       parent, SIGNAL( repaintNeeded() ));
 
-    QObject::connect ( &m_layerManager, SIGNAL( pluginSettingsChanged() ),
-                       parent,        SIGNAL( pluginSettingsChanged() ) );
     QObject::connect ( &m_layerManager, SIGNAL( repaintNeeded( QRegion ) ),
                        parent,        SIGNAL( repaintNeeded( QRegion ) ) );
     QObject::connect ( &m_layerManager, SIGNAL( renderPluginInitialized( RenderPlugin * ) ),
                        parent,        SIGNAL( renderPluginInitialized( RenderPlugin * ) ) );
     QObject::connect ( &m_layerManager, SIGNAL( visibilityChanged( const QString &, bool ) ),
                        parent,        SLOT( setPropertyValue( const QString &, bool ) ) );
+
+    QObject::connect( &m_floatItemsLayer, SIGNAL( repaintNeeded( QRegion ) ),
+                      parent,             SIGNAL( repaintNeeded( QRegion ) ) );
+    QObject::connect( &m_floatItemsLayer, SIGNAL( renderPluginInitialized( RenderPlugin * ) ),
+                      parent,             SIGNAL( renderPluginInitialized( RenderPlugin * ) ) );
+    QObject::connect( &m_floatItemsLayer, SIGNAL( visibilityChanged( const QString &, bool ) ),
+                      parent,             SLOT( setPropertyValue( const QString &, bool ) ) );
 
     QObject::connect( &m_geometryLayer, SIGNAL( repaintNeeded()),
                       parent, SIGNAL( repaintNeeded() ));
@@ -186,6 +198,23 @@ MarbleMapPrivate::MarbleMapPrivate( MarbleMap *parent, MarbleModel *model )
 
     QObject::connect( parent, SIGNAL( visibleLatLonAltBoxChanged( const GeoDataLatLonAltBox & ) ),
                       parent, SIGNAL( repaintNeeded() ) );
+
+    foreach ( const RenderPlugin *factory, model->pluginManager()->renderPlugins() ) {
+        RenderPlugin *const renderPlugin = factory->newInstance( model );
+        Q_ASSERT( renderPlugin && "Plugin returned null when requesting a new instance." );
+
+        m_renderPlugins.append( renderPlugin );
+
+        QObject::connect( renderPlugin, SIGNAL( settingsChanged( QString ) ),
+                          parent, SIGNAL( pluginSettingsChanged() ) );
+
+        if ( AbstractFloatItem *const floatItem = qobject_cast<AbstractFloatItem *>( renderPlugin ) ) {
+            m_floatItemsLayer.addFloatItem( floatItem );
+        }
+        else {
+            m_layerManager.addRenderPlugin( renderPlugin );
+        }
+    }
 }
 
 void MarbleMapPrivate::updateProperty( const QString &name, bool show )
@@ -228,7 +257,15 @@ void MarbleMapPrivate::updateProperty( const QString &name, bool show )
        m_textureLayer.setShowRelief( show );
     }
 
-    m_layerManager.setVisible( name, show );
+    foreach( RenderPlugin *renderPlugin, m_renderPlugins ) {
+        if ( name != renderPlugin->nameId() )
+            continue;
+
+        if ( renderPlugin->visible() == show )
+            continue;
+
+        renderPlugin->setVisible( show );
+    }
 }
 
 // ----------------------------------------------------------------
@@ -264,6 +301,7 @@ MarbleMap::~MarbleMap()
 
     d->m_layerManager.removeLayer( &d->m_customPaintLayer );
     d->m_layerManager.removeLayer( &d->m_geometryLayer );
+    d->m_layerManager.removeLayer( &d->m_floatItemsLayer );
     d->m_layerManager.removeLayer( &d->m_fogLayer );
     d->m_layerManager.removeLayer( &d->m_placemarkLayer );
     d->m_layerManager.removeLayer( &d->m_textureLayer );
@@ -272,6 +310,7 @@ MarbleMap::~MarbleMap()
     d->m_layerManager.removeLayer( &d->m_vectorMapLayer );
     d->m_layerManager.removeLayer( &d->m_vectorMapBaseLayer );
     delete d;
+    qDeleteAll( d->m_renderPlugins );
 
     delete model;  // delete the model after private data
 }
@@ -905,7 +944,7 @@ void MarbleMapPrivate::updateMapTheme()
     GeoDataFeature::setDefaultLabelColor( m_model->mapTheme()->map()->labelColor() );
     m_placemarkLayer.requestStyleReset();
 
-    foreach( RenderPlugin *renderPlugin, m_layerManager.renderPlugins() ) {
+    foreach( RenderPlugin *renderPlugin, m_renderPlugins ) {
         bool propertyAvailable = false;
         m_model->mapTheme()->settings()->propertyAvailable( renderPlugin->nameId(), propertyAvailable );
         bool propertyValue = false;
@@ -1136,12 +1175,12 @@ void MarbleMap::setDefaultFont( const QFont& font )
 
 QList<RenderPlugin *> MarbleMap::renderPlugins() const
 {
-    return d->m_layerManager.renderPlugins();
+    return d->m_renderPlugins;
 }
 
 QList<AbstractFloatItem *> MarbleMap::floatItems() const
 {
-    return d->m_layerManager.floatItems();
+    return d->m_floatItemsLayer.floatItems();
 }
 
 AbstractFloatItem * MarbleMap::floatItem( const QString &nameId ) const
