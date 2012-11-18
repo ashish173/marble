@@ -39,6 +39,7 @@ class GLTextureMapper : public QObject
     void mapTexture( QGLContext *glContext, const ViewportParams *viewport );
 
  private:
+    void initializeGL( QGLContext *glContext );
     void loadVisibleTiles( QGLContext *glContext, const ViewportParams *viewport );
     GeoDataCoordinates geoCoordinates( const qreal x, const qreal y ) const;
     void projectionCoordinates( qreal lon, qreal lat, qreal &x, qreal &y ) const;
