@@ -229,6 +229,7 @@ set(marblewidget_SRCS
     GoToDialog.cpp
 
     MapWizard.cpp
+    MapThemeDownloadDialog.cpp
     GeoGraphicsScene.cpp
     ElevationModel.cpp
     MarbleLineEdit.cpp
@@ -268,6 +269,7 @@ set (marblewidget_UI
     routing/RoutingSettingsWidget.ui
     routing/RoutingProfileSettingsDialog.ui
     MapWizard.ui
+    MapThemeDownloadDialog.ui
 )
 
 # FIXME: cleaner approach of src/lib/MarbleControlBox.* vs. marble.qrc
@@ -441,6 +443,7 @@ else (APPLE AND QTONLY)
 
     LatLonEdit.h
     MapWizard.h
+    MapThemeDownloadDialog.h
     ElevationModel.h
 
     routing/AlternativeRoutesModel.h
